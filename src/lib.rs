@@ -2,7 +2,7 @@ mod oww;
 pub use oww::OWW;
 
 mod sampler;
-pub use sampler::{SampleBuffer, Sampler};
+pub use sampler::{SampleBuffer, Sampler, SAMPLES_PER_BUFFER};
 
 mod specter;
 pub use specter::{Melspectogram, Specter};

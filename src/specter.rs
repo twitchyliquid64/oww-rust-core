@@ -3,7 +3,8 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
 use std::thread;
 
-use crate::SampleBuffer;
+use crate::{SampleBuffer, SAMPLES_PER_BUFFER};
+use circular_buffer::CircularBuffer;
 use tract_onnx::prelude::*;
 
 #[derive(Default, Clone, Debug)]
@@ -63,18 +64,55 @@ impl Specter {
         samples: Receiver<SampleBuffer>,
         spec_model: TypedRunnableModel<TypedModel>,
     ) {
+        // We track three buffers: the one we last computed, the one we are computing now,
+        // and the one we will compute next. We use the last and next to overlap with
+        // the one we are currently computing now.
+        let mut buffers = CircularBuffer::<3, SampleBuffer>::new();
+
         loop {
             if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
                 return;
             }
-            let samples: Tensor = match samples.recv() {
+            buffers.push_back(match samples.recv() {
                 Ok(s) => s,
                 Err(_e) => return,
+            });
+            if !buffers.is_full() {
+                continue;
             }
-            .into();
+
             if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
                 return;
             }
+
+            // Overlap by 50% with the buffer before and after: achieving what
+            // the literature would call a hamming window with 50% overlap.
+            let mut s = buffers.get(1).unwrap().clone();
+            s.iter_mut()
+                .zip(
+                    (0..SAMPLES_PER_BUFFER / 2).map(|_| None).chain(
+                        buffers
+                            .get(2)
+                            .unwrap()
+                            .iter()
+                            .take(SAMPLES_PER_BUFFER / 2)
+                            .map(|s| Some(s)),
+                    ),
+                )
+                .zip(
+                    buffers
+                        .get(0)
+                        .unwrap()
+                        .iter()
+                        .skip(SAMPLES_PER_BUFFER / 2)
+                        .map(|s| Some(s))
+                        .chain((0..SAMPLES_PER_BUFFER / 2).map(|_| None)),
+                )
+                .for_each(|((s, before), after)| {
+                    *s = *s + before.unwrap_or(&0.) + after.unwrap_or(&0.);
+                });
+
+            let samples: Tensor = s.into();
 
             // run the spectogram on the input
             let out = spec_model.run(tvec!(samples.into())).unwrap().remove(0);

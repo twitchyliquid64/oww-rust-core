@@ -7,9 +7,31 @@ use crate::Embedding;
 use circular_buffer::CircularBuffer;
 use tract_onnx::prelude::*;
 
+#[derive(Clone, Debug)]
+pub struct ModelFilters {
+    pub scale: f32,        // how much to scale model_val
+    pub clamp: (f32, f32), // bounds for output value
+}
+
+impl Default for ModelFilters {
+    fn default() -> Self {
+        Self {
+            scale: 1.0,
+            clamp: (0.0, 1.0),
+        }
+    }
+}
+
+impl ModelFilters {
+    fn apply(&self, model: f32) -> f32 {
+        (model * self.scale).min(self.clamp.1).max(self.clamp.0)
+    }
+}
+
 pub struct NamedModel {
     name: String,
     model: TypedRunnableModel<TypedModel>,
+    filters: ModelFilters,
 }
 
 impl NamedModel {
@@ -24,7 +46,16 @@ impl NamedModel {
             .into_runnable()?;
 
         let name = name.into();
-        Ok(Self { name, model })
+        let filters = ModelFilters::default();
+        Ok(Self {
+            name,
+            model,
+            filters,
+        })
+    }
+
+    fn apply(&mut self, model_val: f32) -> f32 {
+        self.filters.apply(model_val)
     }
 }
 
@@ -111,16 +142,18 @@ impl Runner {
             let results = models
                 .lock()
                 .unwrap()
-                .iter()
+                .iter_mut()
                 .map(|m| {
                     (
                         m.name.clone(),
-                        m.model
-                            .run(tvec!(feature_input.clone().into()))
-                            .unwrap()
-                            .remove(0)
-                            .as_slice()
-                            .unwrap()[0],
+                        m.apply(
+                            m.model
+                                .run(tvec!(feature_input.clone().into()))
+                                .unwrap()
+                                .remove(0)
+                                .as_slice()
+                                .unwrap()[0],
+                        ),
                     )
                 })
                 .collect();

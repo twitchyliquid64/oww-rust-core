@@ -7,10 +7,13 @@ use std::thread;
 
 use tract_onnx::prelude::*;
 
+pub const SAMPLES_PER_BUFFER: usize = 1280;
+
 pub type SampleBuffer =
     tract_ndarray::ArrayBase<tract_ndarray::OwnedRepr<f32>, tract_ndarray::Dim<[usize; 2]>>;
 
-/// Sampler collects audio samples and outputs fixed-size chunks of samples.
+/// Sampler collects audio samples and outputs fixed-size chunks of samples. Chunks
+/// are windowed using the hamming function.
 pub struct Sampler {
     child: Child,
     recv: Option<Receiver<SampleBuffer>>,
@@ -56,19 +59,25 @@ impl Sampler {
         shutdown: Arc<AtomicBool>,
         mut stdout: std::process::ChildStdout,
     ) {
+        // Compute the co-efficients to apply the hamming window.
+        let co_effs: Vec<_> = apodize::hamming_iter(SAMPLES_PER_BUFFER)
+            .map(|x| x as f32)
+            .collect();
+
         loop {
-            let buff: SampleBuffer = tract_ndarray::Array2::from_shape_fn((1, 1280), |(_, _c)| {
-                if shutdown.load(std::sync::atomic::Ordering::Relaxed) {
-                    return 0.0;
-                }
+            let buff: SampleBuffer =
+                tract_ndarray::Array2::from_shape_fn((1, SAMPLES_PER_BUFFER), |(_, i)| {
+                    if shutdown.load(std::sync::atomic::Ordering::Relaxed) {
+                        return 0.0;
+                    }
 
-                use std::io::Read;
-                let mut buffer = [0u8; std::mem::size_of::<u16>()];
-                stdout.read_exact(&mut buffer).unwrap();
+                    use std::io::Read;
+                    let mut buffer = [0u8; std::mem::size_of::<u16>()];
+                    stdout.read_exact(&mut buffer).unwrap();
 
-                let sample = i16::from_le_bytes(buffer);
-                sample as f32
-            });
+                    let sample = i16::from_le_bytes(buffer);
+                    (sample as f32) * co_effs[i].max(1.)
+                });
 
             if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
                 return;

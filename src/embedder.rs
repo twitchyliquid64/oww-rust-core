@@ -72,56 +72,60 @@ impl Embedder {
         emb_model: TypedRunnableModel<TypedModel>,
     ) {
         let mut spectograms = CircularBuffer::<NUM_SPECTOGRAMS, Melspectogram>::new();
+        let mut steps: usize = 0;
 
         loop {
             if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
                 return;
             }
             match spectos.recv() {
-                Ok(s) => s.into_iter().for_each(|s| spectograms.push_back(s)),
+                Ok(s) => s.into_iter().for_each(|s| {
+                    spectograms.push_back(s);
+                    steps += 1;
+
+                    if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
+                        return;
+                    }
+
+                    // Don't compute the embeddings unless we have a full set of input (76 spectograms)
+                    // for the model
+                    if !spectograms.is_full() || steps % 6 != 0 {
+                        return;
+                    }
+
+                    // Build a tensor that will be the input to the embedding model, which is [?, 76, 32, 1].
+                    // I presume that means [batch_size=1, num_melspectograms=76, num_spect_bins=32, ?].
+                    let embedding_input: Tensor =
+                        tract_ndarray::Array::<f32, tract_ndarray::Dim<[usize; 1]>>::from_iter(
+                            spectograms
+                                .iter()
+                                .map(|spect| spect.iter())
+                                .flatten()
+                                .copied(),
+                        )
+                        .into_shape((1, NUM_SPECTOGRAMS, 32, 1))
+                        .unwrap()
+                        .into();
+                    // println!("model: {:?}", embedding_model.model());
+
+                    // Compute the embedding for this chunk of spectograms.
+                    let out = emb_model
+                        .run(tvec!(embedding_input.into()))
+                        .unwrap()
+                        .remove(0);
+                    let mut embedding = Embedding::default();
+                    embedding.0.clone_from_slice(out.as_slice::<f32>().unwrap());
+
+                    if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
+                        return;
+                    }
+                    if let Err(e) = tx.send(embedding) {
+                        println!("failed send, embedding thread shutting down! {:?}", e);
+                        return;
+                    }
+                }),
                 Err(_e) => return,
             };
-            if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
-                return;
-            }
-
-            // Don't compute the embeddings unless we have a full set of input (76 spectograms)
-            // for the model
-            if !spectograms.is_full() {
-                continue;
-            }
-
-            // Build a tensor that will be the input to the embedding model, which is [?, 76, 32, 1].
-            // I presume that means [batch_size=1, num_melspectograms=76, num_spect_bins=32, ?].
-            let embedding_input: Tensor =
-                tract_ndarray::Array::<f32, tract_ndarray::Dim<[usize; 1]>>::from_iter(
-                    spectograms
-                        .iter()
-                        .map(|spect| spect.iter())
-                        .flatten()
-                        .copied(),
-                )
-                .into_shape((1, NUM_SPECTOGRAMS, 32, 1))
-                .unwrap()
-                .into();
-            // println!("model: {:?}", embedding_model.model());
-
-            // Compute the embedding for this chunk of spectograms.
-            let out = emb_model
-                .run(tvec!(embedding_input.into()))
-                .unwrap()
-                .remove(0);
-            let mut embedding = Embedding::default();
-            embedding.0.clone_from_slice(out.as_slice::<f32>().unwrap());
-
-            if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
-                return;
-            }
-
-            if let Err(e) = tx.send(embedding) {
-                println!("failed send, embedding thread shutting down! {:?}", e);
-                return;
-            }
         }
     }
 }
