@@ -38,6 +38,7 @@ impl NamedModel {
     pub fn new<S: Into<String>>(
         name: S,
         path: S,
+        scale: f32,
     ) -> Result<Self, tract_onnx::tract_core::anyhow::Error> {
         let model = tract_onnx::onnx()
             // load the model
@@ -46,7 +47,10 @@ impl NamedModel {
             .into_runnable()?;
 
         let name = name.into();
-        let filters = ModelFilters::default();
+        let filters = ModelFilters {
+            scale,
+            ..ModelFilters::default()
+        };
         Ok(Self {
             name,
             model,

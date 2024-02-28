@@ -88,8 +88,8 @@ impl Embedder {
                     }
 
                     // Don't compute the embeddings unless we have a full set of input (76 spectograms)
-                    // for the model
-                    if !spectograms.is_full() || steps % 6 != 0 {
+                    // for the model, and we have strided the right number of steps
+                    if !spectograms.is_full() || steps % 4 != 0 {
                         return;
                     }
 

@@ -22,7 +22,7 @@ pub struct Sampler {
 }
 
 impl Sampler {
-    pub fn start() -> Result<Self, std::io::Error> {
+    pub fn start(preamp: Option<f32>) -> Result<Self, std::io::Error> {
         let mut child = Command::new("arecord")
             .arg("-r")
             .arg("16000")
@@ -37,7 +37,7 @@ impl Sampler {
         let shutdown2 = shutdown.clone();
         let stdout = child.stdout.take().unwrap();
         let thread = Some(thread::spawn(move || {
-            Sampler::mainloop(send, shutdown2, stdout);
+            Sampler::mainloop(preamp.unwrap_or(0.1), send, shutdown2, stdout);
         }));
 
         let out = Self {
@@ -55,6 +55,7 @@ impl Sampler {
     }
 
     fn mainloop(
+        scale: f32,
         tx: Sender<SampleBuffer>,
         shutdown: Arc<AtomicBool>,
         mut stdout: std::process::ChildStdout,
@@ -76,7 +77,7 @@ impl Sampler {
                     stdout.read_exact(&mut buffer).unwrap();
 
                     let sample = i16::from_le_bytes(buffer);
-                    (sample as f32) * co_effs[i].max(1.)
+                    (sample as f32) * co_effs[i].max(1.) * scale
                 });
 
             if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
