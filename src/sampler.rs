@@ -60,14 +60,9 @@ impl Sampler {
         shutdown: Arc<AtomicBool>,
         mut stdout: std::process::ChildStdout,
     ) {
-        // Compute the co-efficients to apply the hamming window.
-        let co_effs: Vec<_> = apodize::hamming_iter(SAMPLES_PER_BUFFER)
-            .map(|x| x as f32)
-            .collect();
-
         loop {
             let buff: SampleBuffer =
-                tract_ndarray::Array2::from_shape_fn((1, SAMPLES_PER_BUFFER), |(_, i)| {
+                tract_ndarray::Array2::from_shape_fn((1, SAMPLES_PER_BUFFER), |(_, _i)| {
                     if shutdown.load(std::sync::atomic::Ordering::Relaxed) {
                         return 0.0;
                     }
@@ -77,7 +72,7 @@ impl Sampler {
                     stdout.read_exact(&mut buffer).unwrap();
 
                     let sample = i16::from_le_bytes(buffer);
-                    (sample as f32) * co_effs[i].max(1.) * scale
+                    (sample as f32) * scale
                 });
 
             if shutdown.load(std::sync::atomic::Ordering::SeqCst) {

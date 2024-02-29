@@ -56,7 +56,7 @@ impl MatchState {
             Some("exec") => {
                 use std::process::Command;
 
-                let mut c = Command::new("./".to_owned() + spl.next().unwrap());
+                let mut c = Command::new(spl.next().unwrap());
                 let cmd = c.current_dir(std::env::current_dir().unwrap()).args(spl);
                 println!("spawning: {:?}", &cmd);
                 println!("result: {:?}", cmd.spawn());
@@ -144,6 +144,7 @@ impl Matcher {
     }
 
     pub fn eval(&mut self, activations: Vec<(String, f32)>) {
+        println!("{:?}", activations);
         for (name, m) in self.matches.iter_mut() {
             m.eval(name, &activations);
         }

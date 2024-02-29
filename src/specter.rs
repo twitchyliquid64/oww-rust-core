@@ -64,6 +64,11 @@ impl Specter {
         samples: Receiver<SampleBuffer>,
         spec_model: TypedRunnableModel<TypedModel>,
     ) {
+        // Compute the co-efficients to apply the hamming window.
+        let co_effs: Vec<_> = apodize::hamming_iter(SAMPLES_PER_BUFFER)
+            .map(|x| x as f32)
+            .collect();
+
         // We track three buffers: the one we last computed, the one we are computing now,
         // and the one we will compute next. We use the last and next to overlap with
         // the one we are currently computing now.
@@ -108,8 +113,11 @@ impl Specter {
                         .map(|s| Some(s))
                         .chain((0..SAMPLES_PER_BUFFER / 2).map(|_| None)),
                 )
-                .for_each(|((s, before), after)| {
-                    *s = *s + before.unwrap_or(&0.) + after.unwrap_or(&0.);
+                .enumerate()
+                .for_each(|(i, ((s, before), after))| {
+                    *s = *s
+                        + 0.32 * co_effs[i] * before.unwrap_or(&0.)
+                        + 0.25 * co_effs[SAMPLES_PER_BUFFER - i - 1] * after.unwrap_or(&0.);
                 });
 
             let samples: Tensor = s.into();

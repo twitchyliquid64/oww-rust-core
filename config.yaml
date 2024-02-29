@@ -39,13 +39,13 @@ matchers:
       - model: dino_core
       - model: preset
         activation_threshold: 0.2
-    action: exec:ha-post:automation/trigger:automation.twilight_colors
+    action: exec:./ha-post:automation/trigger:automation.twilight_colors
   daytime:
     chain:
       - model: wakeword
       - model: on
         activation_threshold: 0.2
-    action: exec:ha-post:automation/trigger:automation.arctic_colors
+    action: exec:./ha-post:automation/trigger:automation.arctic_colors
 
   lights_out:
     chain:
@@ -53,7 +53,7 @@ matchers:
         activation_threshold: 0.35
       - model: shutdown
         activation_threshold: 0.32
-    action: exec:ha-post:automation/trigger:automation.lights_all_off
+    action: exec:./ha-post:automation/trigger:automation.lights_all_off
 
   max_brightness:
     chain:
@@ -61,4 +61,4 @@ matchers:
         activation_threshold: 0.35
       - model: maxima
         activation_threshold: 0.3
-    action: exec:ha-post:script/turn_on:script.max_brightness
+    action: exec:./ha-post:script/turn_on:script.max_brightness

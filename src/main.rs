@@ -11,6 +11,10 @@ struct Args {
     #[arg(short, long)]
     preamp: Option<f32>,
 
+    /// how many spectograms to buffer before computing the embedding
+    #[arg(short, long, default_value_t = 4)]
+    step_interval: usize,
+
     /// yaml-formatted config file
     config_file: String,
 }
@@ -23,7 +27,7 @@ fn main() {
     let mut sampler = Sampler::start(args.preamp).expect("failed to start listening for samples");
     let mut specter = Specter::start(sampler.take_receiver().unwrap())
         .expect("failed to start processing samples");
-    let mut embedder = Embedder::start(specter.take_receiver().unwrap())
+    let mut embedder = Embedder::start(specter.take_receiver().unwrap(), args.step_interval)
         .expect("failed to start processing spectos");
 
     let mut runner = Runner::start(embedder.take_receiver().unwrap())

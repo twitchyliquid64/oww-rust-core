@@ -35,6 +35,7 @@ pub struct Embedder {
 impl Embedder {
     pub fn start(
         spectos: Receiver<Vec<Melspectogram>>,
+        step_interval: usize,
     ) -> Result<Self, tract_onnx::tract_core::anyhow::Error> {
         let emb_model = tract_onnx::onnx()
             // load the model
@@ -49,7 +50,7 @@ impl Embedder {
 
         let shutdown2 = shutdown.clone();
         let thread = Some(thread::spawn(move || {
-            Embedder::mainloop(send, shutdown2, spectos, emb_model);
+            Embedder::mainloop(send, shutdown2, spectos, emb_model, step_interval);
         }));
 
         let out = Self {
@@ -70,6 +71,7 @@ impl Embedder {
         shutdown: Arc<AtomicBool>,
         spectos: Receiver<Vec<Melspectogram>>,
         emb_model: TypedRunnableModel<TypedModel>,
+        step_interval: usize,
     ) {
         let mut spectograms = CircularBuffer::<NUM_SPECTOGRAMS, Melspectogram>::new();
         let mut steps: usize = 0;
@@ -89,7 +91,7 @@ impl Embedder {
 
                     // Don't compute the embeddings unless we have a full set of input (76 spectograms)
                     // for the model, and we have strided the right number of steps
-                    if !spectograms.is_full() || steps % 4 != 0 {
+                    if !spectograms.is_full() || steps % step_interval != 0 {
                         return;
                     }
 
