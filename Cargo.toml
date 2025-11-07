@@ -1,12 +1,13 @@
 [package]
 name = "oww-rust-core"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tract-onnx = "0.21"
+anyhow = "1.0"
+tract-onnx = "0.22"
 circular-buffer = "0.1"
 apodize = "1"
 

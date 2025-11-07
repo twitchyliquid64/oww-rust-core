@@ -36,7 +36,7 @@ impl Embedder {
     pub fn start(
         spectos: Receiver<Vec<Melspectogram>>,
         step_interval: usize,
-    ) -> Result<Self, tract_onnx::tract_core::anyhow::Error> {
+    ) -> Result<Self, anyhow::Error> {
         let emb_model = tract_onnx::onnx()
             // load the model
             .model_for_path("embedding_model.onnx")?
@@ -91,28 +91,27 @@ impl Embedder {
 
                     // Don't compute the embeddings unless we have a full set of input (76 spectograms)
                     // for the model, and we have strided the right number of steps
-                    if !spectograms.is_full() || steps % step_interval != 0 {
+                    if !spectograms.is_full() || !steps.is_multiple_of(step_interval) {
                         return;
                     }
 
                     // Build a tensor that will be the input to the embedding model, which is [?, 76, 32, 1].
                     // I presume that means [batch_size=1, num_melspectograms=76, num_spect_bins=32, ?].
-                    let embedding_input: Tensor =
-                        tract_ndarray::Array::<f32, tract_ndarray::Dim<[usize; 1]>>::from_iter(
-                            spectograms
-                                .iter()
-                                .map(|spect| spect.iter())
-                                .flatten()
-                                .copied(),
-                        )
-                        .into_shape((1, NUM_SPECTOGRAMS, 32, 1))
-                        .unwrap()
-                        .into();
+                    let embedding_input = Tensor::from_shape(
+                        &[1, NUM_SPECTOGRAMS, 32, 1],
+                        spectograms
+                            .iter()
+                            .flat_map(|spect| spect.iter())
+                            .copied()
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                    )
+                    .unwrap();
                     // println!("model: {:?}", embedding_model.model());
 
                     // Compute the embedding for this chunk of spectograms.
                     let out = emb_model
-                        .run(tvec!(embedding_input.into()))
+                        .run(tvec!(TValue::from(embedding_input)))
                         .unwrap()
                         .remove(0);
                     let mut embedding = Embedding::default();
@@ -123,7 +122,6 @@ impl Embedder {
                     }
                     if let Err(e) = tx.send(embedding) {
                         println!("failed send, embedding thread shutting down! {:?}", e);
-                        return;
                     }
                 }),
                 Err(_e) => return,

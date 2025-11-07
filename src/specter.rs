@@ -28,9 +28,7 @@ pub struct Specter {
 }
 
 impl Specter {
-    pub fn start(
-        samples: Receiver<SampleBuffer>,
-    ) -> Result<Self, tract_onnx::tract_core::anyhow::Error> {
+    pub fn start(samples: Receiver<SampleBuffer>) -> Result<Self, anyhow::Error> {
         let spec_model = tract_onnx::onnx()
             // load the model
             .model_for_path("melspectrogram.onnx")?
@@ -101,7 +99,7 @@ impl Specter {
                             .unwrap()
                             .iter()
                             .take(SAMPLES_PER_BUFFER / 2)
-                            .map(|s| Some(s)),
+                            .map(Some),
                     ),
                 )
                 .zip(
@@ -110,7 +108,7 @@ impl Specter {
                         .unwrap()
                         .iter()
                         .skip(SAMPLES_PER_BUFFER / 2)
-                        .map(|s| Some(s))
+                        .map(Some)
                         .chain((0..SAMPLES_PER_BUFFER / 2).map(|_| None)),
                 )
                 .enumerate()
@@ -131,7 +129,7 @@ impl Specter {
             spects.extend(out.as_slice::<f32>().unwrap().chunks(32).map(|chunk| {
                 let mut out = Melspectogram::default();
                 chunk
-                    .into_iter()
+                    .iter()
                     .zip(out.iter_mut())
                     .for_each(|(input, output)| {
                         // Don't h8 this is what openWakeWords does! https://github.com/dscripka/openWakeWord/blob/main/openwakeword/utils.py#L180

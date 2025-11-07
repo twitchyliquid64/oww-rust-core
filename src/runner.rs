@@ -35,11 +35,7 @@ pub struct NamedModel {
 }
 
 impl NamedModel {
-    pub fn new<S: Into<String>>(
-        name: S,
-        path: S,
-        scale: f32,
-    ) -> Result<Self, tract_onnx::tract_core::anyhow::Error> {
+    pub fn new<S: Into<String>>(name: S, path: S, scale: f32) -> Result<Self, anyhow::Error> {
         let model = tract_onnx::onnx()
             // load the model
             .model_for_path(path.into())?
@@ -74,9 +70,7 @@ pub struct Runner {
 }
 
 impl Runner {
-    pub fn start(
-        embeddings: Receiver<Embedding>,
-    ) -> Result<Self, tract_onnx::tract_core::anyhow::Error> {
+    pub fn start(embeddings: Receiver<Embedding>) -> Result<Self, anyhow::Error> {
         let models = Arc::new(Mutex::new(vec![]));
         let (send, recv) = sync_channel(1);
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -132,17 +126,16 @@ impl Runner {
                 continue;
             }
             // Build a tensor that will be the input to the feature model, which is [1, 16, 96].
-            let feature_input: Tensor =
-                tract_ndarray::Array::<f32, tract_ndarray::Dim<[usize; 1]>>::from_iter(
-                    embeddings
-                        .iter()
-                        .map(|spect| spect.iter())
-                        .flatten()
-                        .copied(),
-                )
-                .into_shape((1, NUM_EMBEDDINGS, 96))
-                .unwrap()
-                .into();
+            let feature_input = Tensor::from_shape(
+                &[1, NUM_EMBEDDINGS, 96],
+                embeddings
+                    .iter()
+                    .flat_map(|spect| spect.iter())
+                    .copied()
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+            )
+            .unwrap();
             let results = models
                 .lock()
                 .unwrap()
@@ -152,7 +145,7 @@ impl Runner {
                         m.name.clone(),
                         m.apply(
                             m.model
-                                .run(tvec!(feature_input.clone().into()))
+                                .run(tvec!(TValue::from(feature_input.clone())))
                                 .unwrap()
                                 .remove(0)
                                 .as_slice()

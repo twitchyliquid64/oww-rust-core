@@ -20,7 +20,7 @@ impl MatchStage {
     fn eval(
         &mut self,
         started_time: Option<&Instant>,
-        activations: &Vec<(String, f32)>,
+        activations: &[(String, f32)],
     ) -> StageResult {
         if let Some((_, amt)) = activations.iter().find(|(n, _)| n == &self.model) {
             if amt >= &self.activation_threshold {
@@ -67,7 +67,7 @@ impl MatchState {
         };
     }
 
-    fn eval(&mut self, name: &String, activations: &Vec<(String, f32)>) {
+    fn eval(&mut self, name: &String, activations: &[(String, f32)]) {
         match self.current_stage {
             Some((idx, started)) => {
                 let res = self.stages[idx].eval(Some(&started), activations);
@@ -99,7 +99,7 @@ impl MatchState {
             }
 
             None => {
-                if self.stages.len() > 0 {
+                if !self.stages.is_empty() {
                     if let StageResult::Matched = self.stages[0].eval(None, activations) {
                         if self.stages.len() >= 2 {
                             self.current_stage = Some((1, Instant::now()));
@@ -116,6 +116,12 @@ impl MatchState {
 #[derive(Debug)]
 pub struct Matcher {
     matches: BTreeMap<String, MatchState>,
+}
+
+impl Default for Matcher {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Matcher {
@@ -136,7 +142,6 @@ impl Matcher {
                 model: stage.model,
                 timeout_ms: stage.timeout_ms.unwrap_or(3200),
                 activation_threshold: stage.activation_threshold.unwrap_or(0.5),
-                ..MatchStage::default()
             })
         }
 
