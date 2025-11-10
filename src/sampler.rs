@@ -1,31 +1,30 @@
 use std::process::{Child, Command, Stdio};
 
-use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 
-use tract_onnx::prelude::*;
+use crate::Chunk;
 
-pub const SAMPLES_PER_BUFFER: usize = 1280;
-
-pub type SampleBuffer =
-    tract_ndarray::ArrayBase<tract_ndarray::OwnedRepr<f32>, tract_ndarray::Dim<[usize; 2]>>;
+pub const SAMPLE_RATE: usize = 16000;
 
 /// Sampler collects audio samples and outputs fixed-size chunks of samples. Chunks
 /// are windowed using the hamming function.
-pub struct Sampler {
+pub struct Sampler<const S: usize> {
     child: Child,
-    recv: Option<Receiver<SampleBuffer>>,
+    recv: Option<Receiver<Chunk<S>>>,
     shutdown: Arc<AtomicBool>,
     thread: Option<thread::JoinHandle<()>>,
 }
 
-impl Sampler {
+impl<const S: usize> Sampler<S> {
     pub fn start(preamp: Option<f32>) -> Result<Self, std::io::Error> {
         let mut child = Command::new("arecord")
             .arg("-r")
-            .arg("16000")
+            .arg(SAMPLE_RATE.to_string())
+            .arg("-c")
+            .arg("1")
             .arg("-f")
             .arg("S16_LE")
             .stdout(Stdio::piped())
@@ -50,19 +49,20 @@ impl Sampler {
         Ok(out)
     }
 
-    pub fn take_receiver(&mut self) -> Option<Receiver<SampleBuffer>> {
+    pub fn take_receiver(&mut self) -> Option<Receiver<Chunk<S>>> {
         self.recv.take()
     }
 
     fn mainloop(
         scale: f32,
-        tx: Sender<SampleBuffer>,
+        tx: Sender<Chunk<S>>,
         shutdown: Arc<AtomicBool>,
         mut stdout: std::process::ChildStdout,
     ) {
+        let mut chunk_id = 0;
         loop {
-            let buff: SampleBuffer =
-                tract_ndarray::Array2::from_shape_fn((1, SAMPLES_PER_BUFFER), |(_, _i)| {
+            let samples: Vec<f32> = (0..S)
+                .map(|_| {
                     if shutdown.load(std::sync::atomic::Ordering::Relaxed) {
                         return 0.0;
                     }
@@ -72,21 +72,28 @@ impl Sampler {
                     stdout.read_exact(&mut buffer).unwrap();
 
                     let sample = i16::from_le_bytes(buffer);
-                    (sample as f32) * scale
-                });
+                    (sample as f32) * scale / (i16::MAX as f32)
+                })
+                .collect();
+
+            let chunk = Chunk {
+                id: chunk_id,
+                samples: samples.as_slice().try_into().unwrap(),
+            };
+            chunk_id += 1;
 
             if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
                 return;
             }
 
-            if let Err(e) = tx.send(buff) {
+            if let Err(e) = tx.send(chunk) {
                 println!("dropping sample buffer! {:?}", e);
             }
         }
     }
 }
 
-impl Drop for Sampler {
+impl<const S: usize> Drop for Sampler<S> {
     fn drop(&mut self) {
         self.shutdown
             .store(true, std::sync::atomic::Ordering::SeqCst);

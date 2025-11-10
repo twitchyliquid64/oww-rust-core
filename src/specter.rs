@@ -3,9 +3,11 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
 use std::thread;
 
-use crate::{SampleBuffer, SAMPLES_PER_BUFFER};
 use circular_buffer::CircularBuffer;
 use tract_onnx::prelude::*;
+
+use crate::Chunk;
+pub const SPECTOGRAM_SAMPLES: usize = 1280;
 
 #[derive(Default, Clone, Debug)]
 pub struct Melspectogram([f32; 32]);
@@ -28,7 +30,7 @@ pub struct Specter {
 }
 
 impl Specter {
-    pub fn start(samples: Receiver<SampleBuffer>) -> Result<Self, anyhow::Error> {
+    pub fn start(samples: Receiver<Chunk<SPECTOGRAM_SAMPLES>>) -> Result<Self, anyhow::Error> {
         let spec_model = tract_onnx::onnx()
             // load the model
             .model_for_path("melspectrogram.onnx")?
@@ -59,18 +61,18 @@ impl Specter {
     fn mainloop(
         tx: SyncSender<Vec<Melspectogram>>,
         shutdown: Arc<AtomicBool>,
-        samples: Receiver<SampleBuffer>,
+        samples: Receiver<Chunk<SPECTOGRAM_SAMPLES>>,
         spec_model: TypedRunnableModel<TypedModel>,
     ) {
         // Compute the co-efficients to apply the hamming window.
-        let co_effs: Vec<_> = apodize::hamming_iter(SAMPLES_PER_BUFFER)
+        let co_effs: Vec<_> = apodize::hamming_iter(SPECTOGRAM_SAMPLES)
             .map(|x| x as f32)
             .collect();
 
         // We track three buffers: the one we last computed, the one we are computing now,
         // and the one we will compute next. We use the last and next to overlap with
         // the one we are currently computing now.
-        let mut buffers = CircularBuffer::<3, SampleBuffer>::new();
+        let mut buffers = CircularBuffer::<3, Chunk<SPECTOGRAM_SAMPLES>>::new();
 
         loop {
             if shutdown.load(std::sync::atomic::Ordering::SeqCst) {
@@ -90,15 +92,16 @@ impl Specter {
 
             // Overlap by 50% with the buffer before and after: achieving what
             // the literature would call a hamming window with 50% overlap.
-            let mut s = buffers.get(1).unwrap().clone();
+            let mut s = buffers.get(1).unwrap().samples;
             s.iter_mut()
                 .zip(
-                    (0..SAMPLES_PER_BUFFER / 2).map(|_| None).chain(
+                    (0..SPECTOGRAM_SAMPLES / 2).map(|_| None).chain(
                         buffers
                             .get(2)
                             .unwrap()
+                            .samples
                             .iter()
-                            .take(SAMPLES_PER_BUFFER / 2)
+                            .take(SPECTOGRAM_SAMPLES / 2)
                             .map(Some),
                     ),
                 )
@@ -106,19 +109,20 @@ impl Specter {
                     buffers
                         .get(0)
                         .unwrap()
+                        .samples
                         .iter()
-                        .skip(SAMPLES_PER_BUFFER / 2)
+                        .skip(SPECTOGRAM_SAMPLES / 2)
                         .map(Some)
-                        .chain((0..SAMPLES_PER_BUFFER / 2).map(|_| None)),
+                        .chain((0..SPECTOGRAM_SAMPLES / 2).map(|_| None)),
                 )
                 .enumerate()
                 .for_each(|(i, ((s, before), after))| {
                     *s = *s
                         + 0.32 * co_effs[i] * before.unwrap_or(&0.)
-                        + 0.25 * co_effs[SAMPLES_PER_BUFFER - i - 1] * after.unwrap_or(&0.);
+                        + 0.25 * co_effs[SPECTOGRAM_SAMPLES - i - 1] * after.unwrap_or(&0.);
                 });
 
-            let samples: Tensor = s.into();
+            let samples = Tensor::from_shape(&[1, SPECTOGRAM_SAMPLES], &s).unwrap();
 
             // run the spectogram on the input
             let out = spec_model.run(tvec!(samples.into())).unwrap().remove(0);

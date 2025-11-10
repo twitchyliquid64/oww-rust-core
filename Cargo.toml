@@ -1,7 +1,7 @@
 [package]
 name = "oww-rust-core"
 version = "0.1.1"
-edition = "2021"
+edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,3 +14,7 @@ apodize = "1"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 clap = { version = "4.5.1", features = ["derive"] }
+
+earshot = "0.1"
+
+wavers = "1.5"
