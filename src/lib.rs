@@ -54,8 +54,19 @@ pub struct MatchConfig {
     pub action: String,
 }
 
+#[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct UtteranceConfig {
+    #[serde(default)]
+    pub wakeword: Option<String>,
+    #[serde(default)]
+    pub exec: Option<String>,
+}
+
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Config {
     pub models: BTreeMap<String, ModelConfig>,
     pub matchers: BTreeMap<String, MatchConfig>,
+
+    #[serde(default)]
+    pub utterance: UtteranceConfig,
 }

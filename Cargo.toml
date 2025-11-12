@@ -16,5 +16,6 @@ serde_yaml = "0.9"
 clap = { version = "4.5.1", features = ["derive"] }
 
 earshot = "0.1"
-
 wavers = "1.5"
+chrono = "0.4"
+shlex = "1.3"

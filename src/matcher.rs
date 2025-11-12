@@ -150,7 +150,7 @@ impl Matcher {
     }
 
     pub fn eval(&mut self, activations: Vec<(String, f32)>) {
-        println!("{:?}", activations);
+        // println!("{:?}", activations);
         for (name, m) in self.matches.iter_mut() {
             m.eval(name, &activations);
         }

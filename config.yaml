@@ -6,59 +6,20 @@ models:
     path: models/die_no_core.onnx
     scale: 1.25
 
-  shutdown:
-    path: models/shut_down.onnx
-  preset:
-    path: models/pre_set.onnx
-  on:
-    path: models/turn_on.onnx
   lumos:
     path: models/lume_moss.onnx
   maxima:
     path: models/maxima.onnx
-
   famf:
     path: models/freeze_all_motor_function.onnx
+
+utterance:
+  wakeword: dino_core
+  exec: ./on_utterance.sh
 
 matchers:
   shutdown:
     chain:
       - model: dino_core
-      - model: shutdown
-        activation_threshold: 0.32
-    action: exit
-  shutdown_hard:
-    chain:
-      - model: dino_core
       - model: famf
     action: exit:32
-
-
-  nighttime:
-    chain:
-      - model: dino_core
-      - model: preset
-        activation_threshold: 0.2
-    action: exec:./ha-post:automation/trigger:automation.twilight_colors
-  daytime:
-    chain:
-      - model: wakeword
-      - model: on
-        activation_threshold: 0.2
-    action: exec:./ha-post:automation/trigger:automation.arctic_colors
-
-  lights_out:
-    chain:
-      - model: lumos
-        activation_threshold: 0.35
-      - model: shutdown
-        activation_threshold: 0.32
-    action: exec:./ha-post:automation/trigger:automation.lights_all_off
-
-  max_brightness:
-    chain:
-      - model: lumos
-        activation_threshold: 0.35
-      - model: maxima
-        activation_threshold: 0.3
-    action: exec:./ha-post:script/turn_on:script.max_brightness
