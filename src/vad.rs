@@ -1,6 +1,6 @@
-use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
 use std::thread;
 
 use earshot::{VoiceActivityDetector, VoiceActivityProfile};

@@ -19,16 +19,21 @@ pub struct Sampler<const S: usize> {
 }
 
 impl<const S: usize> Sampler<S> {
-    pub fn start(preamp: Option<f32>) -> Result<Self, std::io::Error> {
-        let mut child = Command::new("arecord")
-            .arg("-r")
-            .arg(SAMPLE_RATE.to_string())
-            .arg("-c")
-            .arg("1")
-            .arg("-f")
-            .arg("S16_LE")
-            .stdout(Stdio::piped())
-            .spawn()?;
+    pub fn start(preamp: Option<f32>, device: Option<String>) -> Result<Self, std::io::Error> {
+        let mut cmd = Command::new("arecord");
+        let mut child = if let Some(dev) = &device {
+            cmd.arg("-D").arg(dev)
+        } else {
+            &mut cmd
+        }
+        .arg("-r")
+        .arg(SAMPLE_RATE.to_string())
+        .arg("-c")
+        .arg("1")
+        .arg("-f")
+        .arg("S16_LE")
+        .stdout(Stdio::piped())
+        .spawn()?;
 
         let (send, recv) = channel();
         let shutdown = Arc::new(AtomicBool::new(false));

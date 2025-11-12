@@ -16,6 +16,9 @@ struct Args {
     /// scale samples by this amount
     #[arg(short, long)]
     preamp: Option<f32>,
+    /// input microphone to listen on
+    #[arg(short, long)]
+    device: Option<String>,
 
     /// yaml-formatted config file
     config_file: String,
@@ -27,8 +30,8 @@ fn main() {
     let config: Config = serde_yaml::from_reader(reader).unwrap();
 
     // Sample from microphone in 640-sample chunks, split into two streams
-    let mut sampler =
-        Sampler::<640>::start(args.preamp).expect("failed to start listening for samples");
+    let mut sampler = Sampler::<640>::start(args.preamp, args.device)
+        .expect("failed to start listening for samples");
     let mut tee = Tee::<640, 3>::start(sampler.take_receiver().unwrap()).unwrap();
 
     // VAD pipeline: rechunk to 480-sample chunks, run through VAD, record timestamp of last activity

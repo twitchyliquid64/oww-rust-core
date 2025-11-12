@@ -1,6 +1,6 @@
-use std::sync::atomic::AtomicBool;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread;
 
 use crate::Chunk;
